@@ -1,4 +1,3 @@
-cat > README.md << 'EOF'
 # SOTIF-Aligned ADAS Scenario Validation Benchmark (CARLA)
 
 
