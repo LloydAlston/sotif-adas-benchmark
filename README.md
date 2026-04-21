@@ -14,8 +14,7 @@ validation reports.
 
 This is **not** an ADAS algorithm development project. The scope is
 **validation engineering** — equivalent to system-level V&V activities
-performed at Tier-1 suppliers (Bosch, Continental, Valeo) during
-pre-series ADAS development.
+
 
 ---
 
