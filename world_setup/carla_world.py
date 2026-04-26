@@ -1,5 +1,6 @@
 import carla
 import time
+from kpis.data_logger import DataLogger
 
 
 def get_weather(condition):
@@ -85,6 +86,8 @@ def setup_world():
     ego_vehicle = world.spawn_actor(vehicle_bp, spawn_points[5])
     print(f"Ego vehicle spawned: {ego_vehicle.type_id}")
 
+    logger = DataLogger('data/results/test_run.csv')
+
     time.sleep(2)
 
     spectator = world.get_spectator()
@@ -106,6 +109,7 @@ def setup_world():
     print("Camera attached to ego vehicle")
 
     def on_image(image):
+        logger.log(world, ego_vehicle)  # fixed: logging each frame
         print(f"Frame {image.frame} | Timestamp: {image.timestamp:.2f}s | Resolution: {image.width}x{image.height}")
 
     camera.listen(on_image)
@@ -114,9 +118,11 @@ def setup_world():
 
     print("5 seconds of camera data captured")
 
+    # Cleanup (fixed indentation)
     camera.stop()
     camera.destroy()
     ego_vehicle.destroy()
+    logger.close()
 
     print("Simulation ended, actors destroyed")
 
