@@ -82,7 +82,7 @@ def setup_world():
     vehicle_bp = blueprint_library.find('vehicle.tesla.model3')
 
     spawn_points = world.get_map().get_spawn_points()
-    ego_vehicle = world.spawn_actor(vehicle_bp, spawn_points[3])
+    ego_vehicle = world.spawn_actor(vehicle_bp, spawn_points[5])
     print(f"Ego vehicle spawned: {ego_vehicle.type_id}")
 
     time.sleep(2)
