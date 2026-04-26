@@ -9,6 +9,11 @@ print("Weather set to clear sky, sun high in the sky")
 blueprint_library=world.get_blueprint_library()
 vehicle_bp=blueprint_library.find('vehicle.tesla.model3')
 spawn_points=world.get_map().get_spawn_points()
-ego_vehicle=world.spawn_actor(vehicle_bp, spawn_points[0])
+ego_vehicle=world.spawn_actor(vehicle_bp, spawn_points[3])
 print(f"Ego vehicle spawned: {ego_vehicle.type_id}")
-
+spectator = world.get_spectator()
+transform = ego_vehicle.get_transform()
+spectator.set_transform(carla.Transform(
+    transform.location + carla.Location(x=8,z=4),
+    carla.Rotation(pitch=-15)
+))
