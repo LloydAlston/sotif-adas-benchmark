@@ -27,7 +27,7 @@ def run_scenario_01():
 
     world = client.get_world()
 
-    # --- Sync mode ---
+    # Sync mode
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 0.067
@@ -35,42 +35,52 @@ def run_scenario_01():
 
     print(f"Connected to CARLA: {world.get_map().name}")
 
-    # --- Weather ---
     world.set_weather(get_weather('dry_day'))
 
     blueprint_library = world.get_blueprint_library()
 
-    # --- Spawn vehicles ---
-    spawn_points = world.get_map().get_spawn_points()
+    # Spawn vehicles in same lane
+    spawn_point = world.get_map().get_spawn_points()[0]
 
     ego_bp = blueprint_library.find('vehicle.tesla.model3')
     ego_bp.set_attribute('color', '255,0,0')
-    ego_vehicle = world.spawn_actor(ego_bp, spawn_points[0])
 
     lead_bp = blueprint_library.find('vehicle.tesla.model3')
     lead_bp.set_attribute('color', '0,0,255')
-    lead_vehicle = world.spawn_actor(lead_bp, spawn_points[1])
 
-    print("Vehicles spawned")
+    # Lead vehicle (front)
+    lead_vehicle = world.spawn_actor(lead_bp, spawn_point)
 
-    # --- Spectator ---
+    # Ego vehicle behind lead
+    forward_vec = spawn_point.get_forward_vector()
+    ego_location = spawn_point.location - forward_vec * 15
+    ego_transform = carla.Transform(ego_location, spawn_point.rotation)
+
+    ego_vehicle = world.spawn_actor(ego_bp, ego_transform)
+
+    print("Vehicles spawned in same lane")
+
+    # Traffic Manager (lead only for lane keeping)
+    traffic_manager = client.get_trafficmanager(8000)
+    traffic_manager.set_synchronous_mode(True)
+
+    lead_vehicle.set_autopilot(True)
+    traffic_manager.auto_lane_change(lead_vehicle, False)
+
+    # Spectator
     spectator = world.get_spectator()
 
-    # --- Loggers ---
+    # Loggers
     ego_logger = DataLogger('data/results/s01_ego_dry.csv')
     lead_logger = DataLogger('data/results/s01_lead_dry.csv')
 
-    # --- Initial motion (~50 km/h) ---
     throttle = 0.5
-    ego_vehicle.apply_control(carla.VehicleControl(throttle=throttle))
-    lead_vehicle.apply_control(carla.VehicleControl(throttle=throttle))
-
     triggered = False
     collision = False
 
     print("Running scenario...")
 
-    for step in range(300):  # ~20 seconds
+    for step in range(300):
         world.tick()
         time.sleep(0.067)
 
@@ -79,39 +89,39 @@ def run_scenario_01():
         lead_speed = get_speed(lead_vehicle)
 
         relative_speed = ego_speed - lead_speed
-        ttc = distance / max(relative_speed / 3.6, 0.01)  # seconds
+        ttc = distance / max(relative_speed / 3.6, 0.01)
 
-        # --- Trigger sudden braking ---
+        # Trigger sudden braking
         if not triggered and distance < 20:
-            print(f"⚠️ Brake triggered at distance: {distance:.2f} m")
+            print(f"Lead braking triggered at {distance:.2f} m")
             lead_vehicle.apply_control(
                 carla.VehicleControl(throttle=0.0, brake=1.0)
             )
             triggered = True
 
-        # --- Ego keeps going (NO AEB yet) ---
+        # Ego continues forward (no AEB yet)
         ego_vehicle.apply_control(carla.VehicleControl(throttle=throttle))
 
-        # --- Collision detection ---
+        # Collision detection
         if distance < 2.0 and not collision:
-            print("❌ COLLISION DETECTED")
+            print("Collision detected")
             collision = True
 
-        # --- Print KPI snapshot ---
-        print(f"Step {step} | Dist: {distance:.2f} m | TTC: {ttc:.2f} s | Ego: {ego_speed:.1f} km/h")
+        # Debug output
+        print(f"Step {step} | Dist: {distance:.2f} m | TTC: {ttc:.2f}s | Ego: {ego_speed:.1f} km/h")
 
-        # --- Camera follow ---
+        # Camera follow
         transform = ego_vehicle.get_transform()
         spectator.set_transform(carla.Transform(
             transform.location + carla.Location(x=-8, z=4),
             carla.Rotation(pitch=-15)
         ))
 
-        # --- Log data ---
+        # Log data
         ego_logger.log(world, ego_vehicle)
         lead_logger.log(world, lead_vehicle)
 
-    # --- Cleanup ---
+    # Cleanup
     ego_logger.close()
     lead_logger.close()
 
