@@ -33,4 +33,5 @@ def calculate_ttc(ego_csv, lead_csv):
     # remove infinite TTC values before returning
     df = df[df['ttc'] != np.inf]
     df = df[df['ttc'] < 30]  # cap at 30 seconds (anything higher is not meaningful)
+    df['timestamp'] = df['timestamp_ego'] - df['timestamp_ego'].min()
     return df
