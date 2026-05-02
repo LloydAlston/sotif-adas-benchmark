@@ -56,7 +56,7 @@ def run_scenario_02():
 
     print(f"Connected to CARLA: {world.get_map().name}")
 
-    world.set_weather(get_weather('wet_night'))
+    world.set_weather(get_weather('fog_light'))
 
     blueprint_library = world.get_blueprint_library()
     ego_bp = blueprint_library.find('vehicle.tesla.model3')
@@ -78,7 +78,7 @@ def run_scenario_02():
     spectator = world.get_spectator()
     world.tick()
 
-    ego_logger = DataLogger('data/results/s02_ego_night.csv')
+    ego_logger = DataLogger('data/results/s02_ego_dawn.csv')
 
     # -----------------------------
     # PARAMETERS
@@ -148,7 +148,7 @@ def run_scenario_02():
     # SAVE OFFSET DATA
     # -----------------------------
     pd.DataFrame(offsets).to_csv(
-        'data/results/s02_offsets_night.csv',
+        'data/results/s02_offsets_dawn.csv',
         index=False
     )
 
