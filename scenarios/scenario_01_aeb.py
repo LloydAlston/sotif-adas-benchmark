@@ -9,9 +9,6 @@ from world_setup.carla_world import get_weather
 from kpis.data_logger import DataLogger
 
 
-# -----------------------------
-# Utility Functions
-# -----------------------------
 def get_distance(vehicle1, vehicle2):
     loc1 = vehicle1.get_location()
     loc2 = vehicle2.get_location()
@@ -26,16 +23,30 @@ def set_speed(vehicle, speed_kmh):
     vehicle.set_target_velocity(forward * speed_ms)
 
 
-# -----------------------------
-# MAIN SCENARIO
-# -----------------------------
-def run_scenario_01():
+def compute_ttc(ego, lead):
+    v_ego = ego.get_velocity()
+    v_lead = lead.get_velocity()
+
+    rel_speed = math.sqrt(
+        (v_ego.x - v_lead.x)**2 +
+        (v_ego.y - v_lead.y)**2 +
+        (v_ego.z - v_lead.z)**2
+    )
+
+    distance = get_distance(ego, lead)
+
+    if rel_speed > 0:
+        return distance / rel_speed
+    return float('inf')
+
+
+def run_scenario_01(condition='dry_day'):
+
     client = carla.Client('localhost', 2000)
     client.set_timeout(15.0)
 
     world = client.get_world()
 
-    # Sync mode
     settings = world.get_settings()
     settings.synchronous_mode = True
     settings.fixed_delta_seconds = 0.05
@@ -43,19 +54,34 @@ def run_scenario_01():
 
     print(f"Connected to CARLA: {world.get_map().name}")
 
-    # Weather (as per your scenario.md)
-    world.set_weather(get_weather('dry_day'))
+    world.set_weather(get_weather(condition))
+
+    # -----------------------------
+    # CONDITION PARAMETERS
+    # -----------------------------
+    if condition == 'dry_day':
+        reaction_time = 0.3
+        friction = 1.0
+    elif condition == 'wet_night':
+        reaction_time = 0.6
+        friction = 0.7
+    elif condition == 'heavy_rain':
+        reaction_time = 0.8
+        friction = 0.5
+    else:
+        reaction_time = 0.3
+        friction = 1.0
 
     blueprint_library = world.get_blueprint_library()
 
     ego_bp = blueprint_library.find('vehicle.tesla.model3')
-    ego_bp.set_attribute('color', '255,0,0')  # red (ego)
-
     lead_bp = blueprint_library.find('vehicle.tesla.model3')
-    lead_bp.set_attribute('color', '0,0,255')  # blue (lead)
+
+    ego_bp.set_attribute('color', '255,0,0')
+    lead_bp.set_attribute('color', '0,0,255')
 
     # -----------------------------
-    # SAFE SPAWN
+    # SPAWN (TIGHTER GAP)
     # -----------------------------
     spawn_points = world.get_map().get_spawn_points()
 
@@ -66,7 +92,7 @@ def run_scenario_01():
         forward = sp.get_forward_vector()
 
         lead_transform = carla.Transform(
-            sp.location + forward * 20,
+            sp.location + forward * 26,   # 🔥 reduced gap
             sp.rotation
         )
 
@@ -83,39 +109,45 @@ def run_scenario_01():
                 lead_vehicle.destroy()
 
     if ego_vehicle is None or lead_vehicle is None:
-        print("Could not spawn vehicles")
+        print("Spawn failed")
         return
 
-    spectator = world.get_spectator()
-    world.tick()
+    # -----------------------------
+    # APPLY PHYSICS
+    # -----------------------------
+    for v in [ego_vehicle, lead_vehicle]:
+        physics = v.get_physics_control()
+        for wheel in physics.wheels:
+            wheel.tire_friction = friction
+        v.apply_physics_control(physics)
+
+    print(f"Physics applied (friction={friction})")
 
     # -----------------------------
-    # COLLISION SENSOR (FIX)
+    # COLLISION SENSOR
     # -----------------------------
     collision_flag = {"ego": False}
 
     def collision_callback(event):
         collision_flag["ego"] = True
-        print("Collision detected (sensor)")
-
-    collision_bp = blueprint_library.find('sensor.other.collision')
+        print("💥 Collision detected")
 
     collision_sensor = world.spawn_actor(
-        collision_bp,
+        blueprint_library.find('sensor.other.collision'),
         carla.Transform(),
         attach_to=ego_vehicle
     )
 
     collision_sensor.listen(collision_callback)
 
-    # -----------------------------
-    # LOGGERS
-    # -----------------------------
-    ego_logger = DataLogger('data/results/s01_ego_dry.csv')
-    lead_logger = DataLogger('data/results/s01_lead_dry.csv')
+    ego_logger = DataLogger(f'data/results/s01_ego_{condition}.csv')
+    lead_logger = DataLogger(f'data/results/s01_lead_{condition}.csv')
+
+    spectator = world.get_spectator()
+    world.tick()
 
     # -----------------------------
-    # DRIVING PHASE (~50 km/h)
+    # DRIVE PHASE
     # -----------------------------
     for _ in range(60):
         world.tick()
@@ -135,29 +167,43 @@ def run_scenario_01():
         ego_logger.log(world, ego_vehicle)
         lead_logger.log(world, lead_vehicle)
 
-    print("Vehicles driving straight at ~50 km/h")
+    print("Cruising at 50 km/h")
 
     # -----------------------------
-    # BRAKING PHASE
+    # LEAD BRAKES
     # -----------------------------
-    lead_vehicle.apply_control(carla.VehicleControl(throttle=0.0, brake=1.0))
-    print("Lead vehicle braking hard")
+    lead_vehicle.apply_control(carla.VehicleControl(brake=1.0))
+    print("Lead braking")
 
+    # -----------------------------
+    # AEB LOGIC (TIGHTENED)
+    # -----------------------------
+    delay_frames = int(reaction_time / settings.fixed_delta_seconds)
+
+    detected = False
+    delay_counter = 0
     ego_braking = False
-    min_distance = float('inf')
 
-    for _ in range(75):
+    for _ in range(120):
         world.tick()
 
-        distance = get_distance(ego_vehicle, lead_vehicle)
-        min_distance = min(min_distance, distance)
+        ttc = compute_ttc(ego_vehicle, lead_vehicle)
 
-        if distance < 17.0 and not ego_braking:
+        # 🔥 tighter detection
+        if ttc < 2.6 and not detected:
+            detected = True
+            delay_counter = delay_frames
+            print(f"Object detected (TTC={ttc:.2f}s)")
+
+        if detected and delay_counter > 0:
+            delay_counter -= 1
+
+        elif detected and not ego_braking:
             ego_vehicle.apply_control(
                 carla.VehicleControl(throttle=0.0, brake=1.0)
             )
             ego_braking = True
-            print("Ego vehicle AEB activated")
+            print("AEB activated")
 
         if not ego_braking:
             ego_vehicle.apply_control(carla.VehicleControl(throttle=0.5))
@@ -173,18 +219,13 @@ def run_scenario_01():
         lead_logger.log(world, lead_vehicle)
 
     # -----------------------------
-    # RESULTS (FIXED)
+    # RESULT
     # -----------------------------
-    print(f"Minimum distance during braking: {min_distance:.2f} meters")
-
     if collision_flag["ego"]:
-        print("Collision occurred")
+        print("❌ Collision occurred")
     else:
-        print("No collision")
+        print("✅ No collision")
 
-    # -----------------------------
-    # CLEANUP
-    # -----------------------------
     collision_sensor.stop()
     collision_sensor.destroy()
 
@@ -197,9 +238,9 @@ def run_scenario_01():
     ego_vehicle.destroy()
     lead_vehicle.destroy()
 
-    print("Scenario 1 complete")
+    print("Scenario complete")
 
 
-# -----------------------------
 if __name__ == '__main__':
-    run_scenario_01()
+    condition = sys.argv[1] if len(sys.argv) > 1 else 'dry_day'
+    run_scenario_01(condition)
