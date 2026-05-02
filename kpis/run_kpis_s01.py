@@ -2,9 +2,9 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from kpis.ttc_calculator import calculate_ttc
-from kpis.braking_distance import calculate_braking_distance
-from kpis.sdlp_calculator import calculate_sdlp
+from ttc_calculator import calculate_ttc
+from braking_distance import calculate_braking_distance
+from sdlp_calculator import calculate_sdlp
 
 # Dry day
 print("=== DRY DAY ===")
