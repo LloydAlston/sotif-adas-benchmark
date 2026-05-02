@@ -44,7 +44,7 @@ def run_scenario_01():
     print(f"Connected to CARLA: {world.get_map().name}")
 
     # Weather (as per your scenario.md)
-    world.set_weather(get_weather('heavy_rain'))
+    world.set_weather(get_weather('dry_day'))
 
     blueprint_library = world.get_blueprint_library()
 
@@ -152,7 +152,7 @@ def run_scenario_01():
         distance = get_distance(ego_vehicle, lead_vehicle)
         min_distance = min(min_distance, distance)
 
-        if distance < 14.0 and not ego_braking:
+        if distance < 17.0 and not ego_braking:
             ego_vehicle.apply_control(
                 carla.VehicleControl(throttle=0.0, brake=1.0)
             )
