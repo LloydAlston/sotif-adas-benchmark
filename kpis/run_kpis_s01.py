@@ -36,7 +36,9 @@ for condition, label in zip(conditions, labels):
         f'data/results/s01_ego_{condition}.csv',
         f'data/results/s01_lead_{condition}.csv'
     )
-    ttc_df.to_csv(f'data/results/s01_ttc_{condition}.csv', index=False)
+    # extract only timestamp and ttc columns for plotting
+    plot_df = ttc_df[['timestamp_ego', 'ttc']].rename(columns={'timestamp_ego': 'timestamp'})
+    plot_df.to_csv(f'data/results/s01_ttc_{condition}.csv', index=False)
     plot_ttc(
         f'data/results/s01_ttc_{condition}.csv',
         'Scenario 1 - AEB',

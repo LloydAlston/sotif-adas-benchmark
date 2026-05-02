@@ -30,5 +30,7 @@ def calculate_ttc(ego_csv, lead_csv):
     # handle edge cases
     df.loc[df['relative_velocity'] <= 0, 'ttc'] = np.inf  # not closing or moving apart
     df.loc[df['ttc'] < 0, 'ttc'] = np.inf                # invalid negative TTC
-
+    # remove infinite TTC values before returning
+    df = df[df['ttc'] != np.inf]
+    df = df[df['ttc'] < 30]  # cap at 30 seconds (anything higher is not meaningful)
     return df
