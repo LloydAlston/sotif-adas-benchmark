@@ -44,7 +44,7 @@ def run_scenario_01():
     print(f"Connected to CARLA: {world.get_map().name}")
 
     # Weather (as per your scenario.md)
-    world.set_weather(get_weather('dry_day'))
+    world.set_weather(get_weather('heavy_rain'))
 
     blueprint_library = world.get_blueprint_library()
 
@@ -83,7 +83,7 @@ def run_scenario_01():
                 lead_vehicle.destroy()
 
     if ego_vehicle is None or lead_vehicle is None:
-        print("❌ Could not spawn vehicles")
+        print("Could not spawn vehicles")
         return
 
     spectator = world.get_spectator()
@@ -96,7 +96,7 @@ def run_scenario_01():
 
     def collision_callback(event):
         collision_flag["ego"] = True
-        print("💥 Collision detected (sensor)")
+        print("Collision detected (sensor)")
 
     collision_bp = blueprint_library.find('sensor.other.collision')
 
@@ -152,7 +152,7 @@ def run_scenario_01():
         distance = get_distance(ego_vehicle, lead_vehicle)
         min_distance = min(min_distance, distance)
 
-        if distance < 25.0 and not ego_braking:
+        if distance < 14.0 and not ego_braking:
             ego_vehicle.apply_control(
                 carla.VehicleControl(throttle=0.0, brake=1.0)
             )
@@ -178,9 +178,9 @@ def run_scenario_01():
     print(f"Minimum distance during braking: {min_distance:.2f} meters")
 
     if collision_flag["ego"]:
-        print("❌ Collision occurred")
+        print("Collision occurred")
     else:
-        print("✅ No collision")
+        print("No collision")
 
     # -----------------------------
     # CLEANUP
