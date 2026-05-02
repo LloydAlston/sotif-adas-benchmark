@@ -4,6 +4,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import carla
 import math
+import pandas as pd  # ✅ added
+
 from world_setup.carla_world import get_weather
 from kpis.data_logger import DataLogger
 
@@ -45,7 +47,6 @@ def run_scenario_02():
     client = carla.Client('localhost', 2000)
     client.set_timeout(15.0)
 
-    # ✔ Use correct map for curved motorway
     world = client.load_world('Town04')
 
     settings = world.get_settings()
@@ -55,18 +56,17 @@ def run_scenario_02():
 
     print(f"Connected to CARLA: {world.get_map().name}")
 
-    # ✔ Scenario condition: clear day
     world.set_weather(get_weather('wet_night'))
 
     blueprint_library = world.get_blueprint_library()
     ego_bp = blueprint_library.find('vehicle.tesla.model3')
 
     # -----------------------------
-    # FIXED CURVED SPAWN
+    # SPAWN
     # -----------------------------
     spawn_points = world.get_map().get_spawn_points()
+    ego_transform = spawn_points[20]
 
-    ego_transform = spawn_points[20]  # known curved segment
     ego_vehicle = world.try_spawn_actor(ego_bp, ego_transform)
 
     if ego_vehicle is None:
@@ -83,10 +83,13 @@ def run_scenario_02():
     # -----------------------------
     # PARAMETERS
     # -----------------------------
-    target_speed = 25  # ✔ slightly slower → better visibility
+    target_speed = 25
     ldw_triggered = False
     tlc_at_trigger = None
     lane_crossed = False
+
+    # ✅ OFFSET LOGGING LIST
+    offsets = []
 
     # -----------------------------
     # SIMULATION LOOP
@@ -94,7 +97,6 @@ def run_scenario_02():
     for frame in range(400):
         world.tick()
 
-        # ✔ No corrective steering (tiny bias after delay)
         if frame < 40:
             steer = 0.0
         else:
@@ -104,7 +106,6 @@ def run_scenario_02():
             carla.VehicleControl(throttle=0.5, steer=steer)
         )
 
-        # Maintain speed
         speed_ms = target_speed / 3.6
         forward = ego_vehicle.get_transform().get_forward_vector()
         ego_vehicle.set_target_velocity(forward * speed_ms)
@@ -115,24 +116,26 @@ def run_scenario_02():
         lane_width = ego_wp.lane_width
         offset = get_lateral_offset(ego_vehicle, ego_wp)
 
+        # ✅ STORE OFFSET WITH TIMESTAMP
+        offsets.append({
+            'timestamp': world.get_snapshot().timestamp.elapsed_seconds,
+            'lateral_offset': offset
+        })
+
         tlc = compute_tlc(ego_vehicle, ego_wp, lane_width, offset)
 
-        # -----------------------------
-        # LDW TRIGGER (earlier but valid)
-        # -----------------------------
+        # LDW Trigger
         if tlc < 0.9 and not ldw_triggered:
             ldw_triggered = True
             tlc_at_trigger = tlc
             print(f"⚠️ LDW Triggered | TLC: {tlc:.2f}s | Offset: {offset:.2f}m")
 
-        # -----------------------------
-        # LANE CROSSING
-        # -----------------------------
+        # Lane crossing
         if offset > lane_width / 2 and not lane_crossed:
             print("❌ Lane crossed")
             lane_crossed = True
 
-        # Camera follow
+        # Camera
         transform = ego_vehicle.get_transform()
         spectator.set_transform(carla.Transform(
             transform.location + carla.Location(x=-8, z=4),
@@ -142,7 +145,15 @@ def run_scenario_02():
         ego_logger.log(world, ego_vehicle)
 
     # -----------------------------
-    # RESULT (strict to spec)
+    # SAVE OFFSET DATA
+    # -----------------------------
+    pd.DataFrame(offsets).to_csv(
+        'data/results/s02_offsets_night.csv',
+        index=False
+    )
+
+    # -----------------------------
+    # RESULT
     # -----------------------------
     if ldw_triggered and tlc_at_trigger and tlc_at_trigger > 0.5:
         print("✅ PASS: LDW triggered >0.5s before crossing")
