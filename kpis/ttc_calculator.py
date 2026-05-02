@@ -8,7 +8,7 @@ def calculate_ttc(ego_csv, lead_csv):
     lead = pd.read_csv(lead_csv)
 
     # align by frame (inner join keeps common frames only)
-    df = pd.merge(ego, lead, on='timestamp', suffixes=('_ego', '_lead'))
+    df = pd.merge(ego, lead, on='frame', suffixes=('_ego', '_lead'))
 
     # calculate relative distance (Euclidean distance)
     df['relative_distance'] = np.sqrt(
